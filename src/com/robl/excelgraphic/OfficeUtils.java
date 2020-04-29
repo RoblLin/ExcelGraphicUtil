@@ -1,6 +1,11 @@
+
+
 package com.robl.excelgraphic;
 
-import java.io.FileInputStream;
+import com.alibaba.fastjson.JSONObject;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
@@ -10,281 +15,275 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.poifs.filesystem.POIFSFileSystem;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
 /**
- * ExcelÍ¼±íÉú³É¹¤¾ß
- * 
- * @author Robl
+ * Excelå›¾è¡¨ç”Ÿæˆå·¥å…·
+ * ç›®å‰å·²ä¸æ”¯æŒExcel03
  *
+ * @author Robl
  */
 public class OfficeUtils {
 
-	private static final String START_LOOP_FLAG = "#LoopFlag#";
-	private static final short RANGE_OF_DOUBLE_OF_XLS03_START = 170;
-	private static final short RANGE_OF_DOUBLE_OF_XLS03_END = 200;
-	private static final short RANGE_OF_NUMBER_OF_XLS03_1 = 177;
-	private static final short RANGE_OF_NUMBER_OF_XLS03_2 = 178;
-	private static final short RANGE_OF_NUMBER_OF_XLS03_3 = 182;
+    private static final String START_LOOP_FLAG = "#LoopFlag#";
+    private static final short RANGE_OF_DOUBLE_OF_XLS03_START = 170;
+    private static final short RANGE_OF_DOUBLE_OF_XLS03_END = 200;
+    private static final short RANGE_OF_NUMBER_OF_XLS03_1 = 177;
+    private static final short RANGE_OF_NUMBER_OF_XLS03_2 = 178;
+    private static final short RANGE_OF_NUMBER_OF_XLS03_3 = 182;
 
-	/**
-	 * °´ExcelÄ£°å£¬½«List¡¢Mapµ¼³öExcel
-	 * 
-	 * #¿ÉÖ§³ÖÑ­»·±äÁ¿¼°¹«Ê½×Ô¶¯¼ÆËã
-	 * 
-	 * #Tip£ºµ¥Ôª¸ñÄÚÈİÎª[ÈÕÆÚ£ºDATE]£¬±äÁ¿DATEÎŞ·¨±»¸³Öµ£¬ĞèÎª[DATE]
-	 * 
-	 * @param param
-	 * @throws Exception
-	 */
-	public static void listToExcel(Param param) throws Exception {
-		long t0 = System.currentTimeMillis();
-		String templatePath = param.getTemplateExcepPath();
-		if (templatePath == null || "".equals(templatePath)) {
-			System.out.println("Ä£°åExcel²»ÄÜÎª¿Õ");
-			throw new Exception("Ä£°åExcelÂ·¾¶²»ÄÜÎª¿Õ! getTemplatePath()=null ");
-		}
+    /**
+     * æŒ‰Excelæ¨¡æ¿ï¼Œå°†Listã€Mapå¯¼å‡ºExcel
+     * <p>
+     * #å¯æ”¯æŒå¾ªç¯å˜é‡åŠå…¬å¼è‡ªåŠ¨è®¡ç®—
+     * <p>
+     * #Tipï¼šå•å…ƒæ ¼å†…å®¹ä¸º[æ—¥æœŸï¼šDATE]ï¼Œå˜é‡DATEæ— æ³•è¢«èµ‹å€¼ï¼Œéœ€ä¸º[DATE]
+     *
+     * @param param
+     * @throws Exception
+     */
+    public static void listToExcel(Param param) throws Exception {
+        long t0 = System.currentTimeMillis();
+        InputStream templateInputStream = param.getTemplateInputStream();
+        if (templateInputStream == null) {
+            System.out.println("æ¨¡æ¿Excelè¾“å…¥æµä¸èƒ½ä¸ºç©º");
+            throw new Exception("æ¨¡æ¿Excelè¾“å…¥æµä¸èƒ½ä¸ºç©º! getTemplateInputStream()=null ");
+        }
 
-		// ´´½¨ExcelÎÄµµ
-		Workbook workbook = null;
-		boolean excel07Flag = false;
-		try {
-			workbook = paresExcel(templatePath);
-		} catch (Exception e) {
-			System.out.println("´ò¿ªÄ£°åÊ§°Ü!");
-			throw new Exception("´ò¿ªÄ£°åExcelÊ§°Ü!templatePath=" + templatePath);
-		}
+// åˆ›å»ºExcelæ–‡æ¡£
+        Workbook workbook = null;
+        boolean excel07Flag = false;
+        try {
+            workbook = paresExcel(templateInputStream);
+        } catch (Exception e) {
+            System.out.println("æ‰“å¼€æ¨¡æ¿æµå¤±è´¥!");
+            throw new Exception("æ‰“å¼€æ¨¡æ¿Excelæµå¤±è´¥!templatePath=");
+        }
 
-		if (workbook instanceof XSSFWorkbook) {
-			excel07Flag = true;
-		}
+        if (workbook instanceof XSSFWorkbook) {
+            excel07Flag = true;
+        }
 
-		String fileName = param.getExpExcelName();
-		if (fileName == null || "".equals(fileName)) {
-			fileName = "µ¼³ö±¨±í.xls";
-		} else {
-			fileName = parseExcelName(fileName);
-			if (excel07Flag && fileName.endsWith("xls")) {
-				fileName += "x";// Èç¹ûÊÇ07°æ£¬Î´´«ÈëÉú³ÉÎÄ¼şºó×º£¬ĞèÒª²¹ÉÏ
-			}
-		}
+        String fileName = param.getExpExcelName();
+        if (fileName == null || "".equals(fileName)) {
+            fileName = "å¯¼å‡ºæŠ¥è¡¨.xls";
+        } else {
+            fileName = parseExcelName(fileName);
+            if (excel07Flag && fileName.endsWith("xls")) {
+                fileName += "x";// å¦‚æœæ˜¯07ç‰ˆï¼Œæœªä¼ å…¥ç”Ÿæˆæ–‡ä»¶åç¼€ï¼Œéœ€è¦è¡¥ä¸Š
+            }
+        }
 
-		// »ñÈ¡¹¤×÷²¾sheet
-		int num = param.getDataSheetNum();
-		Sheet sheet = workbook.getSheetAt(num);// Ä¬ÈÏÈ¡µÚÒ»¸ö×Ó±í---´Ë¹¦ÄÜºóĞøÍêÉÆ
-		// »ñÈ¡×ÜÊı
-		int countRowNum = sheet.getLastRowNum();
-		Row startLoopRow = null;
+// è·å–å·¥ä½œç°¿sheet
+        int num = param.getDataSheetNum();
+        Sheet sheet = workbook.getSheetAt(num);// é»˜è®¤å–ç¬¬ä¸€ä¸ªå­è¡¨---æ­¤åŠŸèƒ½åç»­å®Œå–„
+// è·å–æ€»æ•°
+        int countRowNum = sheet.getLastRowNum();
+        Row startLoopRow = null;
 
-		// ²éÕÒÑ­»·±äÁ¿ËùÔÚĞĞ
-		for (int i = 0; i <= countRowNum; i++) {
-			Row row = sheet.getRow(i);
-			if (row == null) {
-				continue;
-			}
-			for (int j = 0; j <= row.getLastCellNum(); j++) {// Ñ­»·Ã¿Ò»ÁĞ
-				if (row.getCell(j) == null) {// Ìø¹ıµ¥Ôª¸ñÎª¿ÕµÄÇé¿ö
-					continue;
-				}
-				String cellValue = row.getCell(j).toString().trim();
-				if (START_LOOP_FLAG.equals(cellValue)) {// Èç¹û²éÑ¯µ½startLoop£¬ÔİÊ±±£´æÒ»ÏÂ
-					startLoopRow = row;
-					break;
-				}
-			}
-		}
+// æŸ¥æ‰¾å¾ªç¯å˜é‡æ‰€åœ¨è¡Œ
+        for (int i = 0; i <= countRowNum; i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) {
+                continue;
+            }
+            for (int j = 0; j <= row.getLastCellNum(); j++) {// å¾ªç¯æ¯ä¸€åˆ—
+                if (row.getCell(j) == null) {// è·³è¿‡å•å…ƒæ ¼ä¸ºç©ºçš„æƒ…å†µ
+                    continue;
+                }
+                String cellValue = row.getCell(j).toString().trim();
+                if (START_LOOP_FLAG.equals(cellValue)) {// å¦‚æœæŸ¥è¯¢åˆ°startLoopï¼Œæš‚æ—¶ä¿å­˜ä¸€ä¸‹
+                    startLoopRow = row;
+                    break;
+                }
+            }
+        }
 
-		// ¸³Öµ·ÇÑ­»·²¿·Ö
-		Map<String, Object> dateMap = param.getHeadMap();
-		if (dateMap != null) {
-			for (Entry<String, Object> entry : dateMap.entrySet())
-				for (int i = 0; i <= countRowNum; i++) {
-					Row row = sheet.getRow(i);
-					if (row == null) {
-						continue;
-					}
-					for (int j = 0; j <= row.getLastCellNum(); j++) {// Ñ­»·Ã¿Ò»ÁĞ
-						if (row.getCell(j) == null) {// Ìø¹ıµ¥Ôª¸ñÎª¿ÕµÄÇé¿ö
-							continue;
-						}
-						String cellValue = row.getCell(j).toString().trim();
-						String entryKey = entry.getKey();
-						if (entryKey.startsWith("=")) {// ¹«Ê½
-							cellValue = "=" + cellValue;// ´ÓExcel»ñÈ¡Ê±Ã»ÓĞ=
-						}
-						if (entryKey.equals(cellValue)) {// ¸³Öµ
-							CellStyle cellStyle = row.getCell(j).getCellStyle();
-							Cell newCell = row.getCell(j);
-							Object objValue = entry.getValue();
+// èµ‹å€¼éå¾ªç¯éƒ¨åˆ†
+        Map<String, Object> dateMap = param.getHeadMap();
+        if (dateMap != null) {
+            for (Entry<String, Object> entry : dateMap.entrySet())
+                for (int i = 0; i <= countRowNum; i++) {
+                    Row row = sheet.getRow(i);
+                    if (row == null) {
+                        continue;
+                    }
+                    for (int j = 0; j <= row.getLastCellNum(); j++) {// å¾ªç¯æ¯ä¸€åˆ—
+                        if (row.getCell(j) == null) {// è·³è¿‡å•å…ƒæ ¼ä¸ºç©ºçš„æƒ…å†µ
+                            continue;
+                        }
+                        String cellValue = row.getCell(j).toString().trim();
+                        String entryKey = entry.getKey();
+                        if (entryKey.startsWith("=")) {// å…¬å¼
+                            cellValue = "=" + cellValue;// ä»Excelè·å–æ—¶æ²¡æœ‰=
+                        }
+                        if (entryKey.equals(cellValue)) {// èµ‹å€¼
+                            CellStyle cellStyle = row.getCell(j).getCellStyle();
+                            Cell newCell = row.getCell(j);
+                            Object objValue = entry.getValue();
 
-							if (objValue instanceof Integer) {
-								newCell.setCellValue((Integer) objValue);
-							} else if (objValue instanceof Double) {
-								newCell.setCellValue((Double) objValue);
-							} else if (objValue instanceof Date) {
-								newCell.setCellValue(new SimpleDateFormat("yyyy-MM-dd").format((Date) objValue));
-							} else {
+                            if (objValue instanceof Integer) {
+                                newCell.setCellValue((Integer) objValue);
+                            } else if (objValue instanceof Double) {
+                                newCell.setCellValue((Double) objValue);
+                            } else if (objValue instanceof Date) {
+                                newCell.setCellValue(new SimpleDateFormat("yyyy-MM-dd").format((Date) objValue));
+                            } else {
 
-								// Ôö¼ÓÊıÖµÌØÊâ»¯´¦Àí
-								Short cellType = cellStyle.getDataFormat();
-								if (cellType > RANGE_OF_DOUBLE_OF_XLS03_START
-										&& cellType < RANGE_OF_DOUBLE_OF_XLS03_END) {
-									// ÊıÖµ¸ñÊ½
-									if (cellType == RANGE_OF_NUMBER_OF_XLS03_1 || cellType == RANGE_OF_NUMBER_OF_XLS03_2
-											|| cellType == RANGE_OF_NUMBER_OF_XLS03_3) {
-										// µ¥Ôª¸ñ¸ñÊ½ÉèÖÃÎªÕûÊı
-										try {
-											newCell.setCellValue(Integer.parseInt(newCell.getStringCellValue()));
-										} catch (Exception e) {
-											newCell.setCellValue(objValue + "");
-										}
-									} else {// Ğ¡ÊıÀàĞÍ
-										try {
-											newCell.setCellValue(Double.parseDouble(newCell.getStringCellValue()));
-										} catch (Exception e) {
-											newCell.setCellValue(objValue + "");
-										}
-									}
-								} else {
-									newCell.setCellValue(objValue + "");
-								}
-							}
-						}
-					}
-				}
-		}
+// å¢åŠ æ•°å€¼ç‰¹æ®ŠåŒ–å¤„ç†
+                                Short cellType = cellStyle.getDataFormat();
+                                if (cellType > RANGE_OF_DOUBLE_OF_XLS03_START
+                                        && cellType < RANGE_OF_DOUBLE_OF_XLS03_END) {
+// æ•°å€¼æ ¼å¼
+                                    if (cellType == RANGE_OF_NUMBER_OF_XLS03_1 || cellType == RANGE_OF_NUMBER_OF_XLS03_2
+                                            || cellType == RANGE_OF_NUMBER_OF_XLS03_3) {
+// å•å…ƒæ ¼æ ¼å¼è®¾ç½®ä¸ºæ•´æ•°
+                                        try {
+                                            newCell.setCellValue(Integer.parseInt(newCell.getStringCellValue()));
+                                        } catch (Exception e) {
+                                            newCell.setCellValue(objValue + "");
+                                        }
+                                    } else {// å°æ•°ç±»å‹
+                                        try {
+                                            newCell.setCellValue(Double.parseDouble(newCell.getStringCellValue()));
+                                        } catch (Exception e) {
+                                            newCell.setCellValue(objValue + "");
+                                        }
+                                    }
+                                } else {
+                                    newCell.setCellValue(objValue + "");
+                                }
+                            }
+                        }
+                    }
+                }
+        }
 
-		int startLoopRowNum = -1;
-		List<Map<String, Object>> dataList = param.getDataList();
-		if (dataList != null && startLoopRow != null) {
-			startLoopRowNum = startLoopRow.getRowNum();
-			int listSize = 0;
-			// ¸³ÖµÑ­»·±äÁ¿²¿·Ö
-			listSize = dataList.size();
-			int k = startLoopRowNum;
-			int startLoopColumNum = startLoopRow.getLastCellNum();
-			if (listSize != 0) {
-				sheet.shiftRows(startLoopRowNum + 1, countRowNum, listSize);// ÏÈ½«Ñ­»·ÏÂ·½ÄÚÈİÏòºóÆ½ÒÆlistSizeµÄĞĞÊı£¬±ãÓÚºó±ß²åÈë±í¸ñÊı¾İ
-			}
+        int startLoopRowNum = -1;
+        List<Object> dataList = param.getDataList();
+        if (dataList != null && startLoopRow != null) {
+            startLoopRowNum = startLoopRow.getRowNum();
+            int listSize = 0;
+// èµ‹å€¼å¾ªç¯å˜é‡éƒ¨åˆ†
+            listSize = dataList.size();
+            int k = startLoopRowNum;
+            int startLoopColumNum = startLoopRow.getLastCellNum();
+            if (listSize != 0) {
+                sheet.shiftRows(startLoopRowNum + 1, countRowNum, listSize);// å…ˆå°†å¾ªç¯ä¸‹æ–¹å†…å®¹å‘åå¹³ç§»listSizeçš„è¡Œæ•°ï¼Œä¾¿äºåè¾¹æ’å…¥è¡¨æ ¼æ•°æ®
+            }
 
-			for (int i = 0; i < listSize; i++) {
-				Row newRow = sheet.createRow(++k);// ĞÂ½¨Ò»ĞĞ
-				newRow.setHeight(startLoopRow.getHeight());
-				for (int j = 0; j < startLoopColumNum; j++) {
-					if (startLoopRow.getCell(j) == null) {// Ìø¹ıµ¥Ôª¸ñÎª¿ÕµÄÇé¿ö
-						continue;
-					}
-					CellStyle cellStyle = startLoopRow.getCell(j).getCellStyle();
+            for (int i = 0; i < listSize; i++) {
+                Row newRow = sheet.createRow(++k);// æ–°å»ºä¸€è¡Œ
+                newRow.setHeight(startLoopRow.getHeight());
+                for (int j = 0; j < startLoopColumNum; j++) {
+                    if (startLoopRow.getCell(j) == null) {// è·³è¿‡å•å…ƒæ ¼ä¸ºç©ºçš„æƒ…å†µ
+                        continue;
+                    }
+                    CellStyle cellStyle = startLoopRow.getCell(j).getCellStyle();
 
-					String cellValue = startLoopRow.getCell(j).toString().trim();
-					Cell newCell = newRow.createCell(j);
-					newCell.setCellStyle(cellStyle);
+                    String cellValue = startLoopRow.getCell(j).toString().trim();
+                    Cell newCell = newRow.createCell(j);
+                    newCell.setCellStyle(cellStyle);
 
-					Object obj = dataList.get(i).get(cellValue);
+                    JSONObject jsonObject = JSONObject.parseObject(JSONObject.toJSONString(dataList.get(i)));
+                    Object obj = jsonObject.get(cellValue);
 
-					if (obj != null) {
-						if (cellValue.equals("#FORMAT")) {// Ñ­»·±äÁ¿ÀïµÄ¹«Ê½
-							String[] arr = (String[]) obj;
-							newCell.setCellFormula(arr[0].replaceFirst("=", ""));
-							newCell.setCellValue(arr[1]);
-						} else if (obj instanceof BigDecimal) {
-							newCell.setCellValue(((BigDecimal) obj).doubleValue());
-						} else if (obj instanceof Double) {
-							newCell.setCellValue((Double) obj);
-						} else if (obj instanceof Integer) {
-							newCell.setCellValue((Integer) obj);
-						} else if (obj instanceof Date) {
-							SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
-							newCell.setCellValue(sft.format((Date) obj));
-						} else if (obj instanceof java.sql.Date) {
-							SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
-							newCell.setCellValue(sft.format((java.sql.Date) obj));
-						} else {
-							// Ôö¼ÓÊıÖµÌØÊâ»¯´¦Àí
-							Short cellType = cellStyle.getDataFormat();
-							if (cellType > RANGE_OF_DOUBLE_OF_XLS03_START && cellType < RANGE_OF_DOUBLE_OF_XLS03_END) {
-								// ÊıÖµ¸ñÊ½
-								if (cellType == RANGE_OF_NUMBER_OF_XLS03_1 || cellType == RANGE_OF_NUMBER_OF_XLS03_2
-										|| cellType == RANGE_OF_NUMBER_OF_XLS03_3) {
-									// µ¥Ôª¸ñ¸ñÊ½ÉèÖÃÎªÕûÊı
-									try {
-										newCell.setCellValue(Integer.parseInt(newCell.getStringCellValue()));
-									} catch (Exception e) {
-										newCell.setCellValue(obj + "");
-									}
-								} else {// Ğ¡ÊıÀàĞÍ
-									try {
-										newCell.setCellValue(Double.parseDouble(newCell.getStringCellValue()));
-									} catch (Exception e) {
-										newCell.setCellValue(obj + "");
-									}
-								}
-							} else {
-								newCell.setCellValue(obj + "");
-							}
-						}
-					}
-				}
-			}
-		}
-		if (startLoopRow != null) {
-			sheet.removeRow(startLoopRow);
-			// É¾³ı±äÁ¿ÃûËùÔÚĞĞ£¬²¢½«ÏÂÃæĞĞÉÏÒÆ
-			sheet.shiftRows(startLoopRowNum + 1, sheet.getLastRowNum(), -1);
-		}
+                    if (obj != null) {
+                        if (cellValue.equals("#FORMAT")) {// å¾ªç¯å˜é‡é‡Œçš„å…¬å¼
+                            String[] arr = (String[]) obj;
+                            newCell.setCellFormula(arr[0].replaceFirst("=", ""));
+                            newCell.setCellValue(arr[1]);
+                        } else if (obj instanceof BigDecimal) {
+                            newCell.setCellValue(((BigDecimal) obj).doubleValue());
+                        } else if (obj instanceof Double) {
+                            newCell.setCellValue((Double) obj);
+                        } else if (obj instanceof Integer) {
+                            newCell.setCellValue((Integer) obj);
+                        } else if (obj instanceof Date) {
+                            SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
+                            newCell.setCellValue(sft.format((Date) obj));
+                        } else if (obj instanceof java.sql.Date) {
+                            SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
+                            newCell.setCellValue(sft.format((java.sql.Date) obj));
+                        } else {
+// å¢åŠ æ•°å€¼ç‰¹æ®ŠåŒ–å¤„ç†
+                            Short cellType = cellStyle.getDataFormat();
+                            if (cellType > RANGE_OF_DOUBLE_OF_XLS03_START && cellType < RANGE_OF_DOUBLE_OF_XLS03_END) {
+// æ•°å€¼æ ¼å¼
+                                if (cellType == RANGE_OF_NUMBER_OF_XLS03_1 || cellType == RANGE_OF_NUMBER_OF_XLS03_2
+                                        || cellType == RANGE_OF_NUMBER_OF_XLS03_3) {
+// å•å…ƒæ ¼æ ¼å¼è®¾ç½®ä¸ºæ•´æ•°
+                                    try {
+                                        newCell.setCellValue(Integer.parseInt(newCell.getStringCellValue()));
+                                    } catch (Exception e) {
+                                        newCell.setCellValue(obj + "");
+                                    }
+                                } else {// å°æ•°ç±»å‹
+                                    try {
+                                        newCell.setCellValue(Double.parseDouble(newCell.getStringCellValue()));
+                                    } catch (Exception e) {
+                                        newCell.setCellValue(obj + "");
+                                    }
+                                }
+                            } else {
+                                newCell.setCellValue(obj + "");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (startLoopRow != null) {
+            sheet.removeRow(startLoopRow);
+// åˆ é™¤å˜é‡åæ‰€åœ¨è¡Œï¼Œå¹¶å°†ä¸‹é¢è¡Œä¸Šç§»
+            if (startLoopRowNum > -1) {
+                sheet.shiftRows(startLoopRowNum + 1, sheet.getLastRowNum(), -1);
+            }
+        }
 
-		// Òş²ØÁĞ
-		int[] arr = param.getHiddenColumns();
-		if (arr != null) {
-			for (int i = 0; i < arr.length; i++) {
-				sheet.setColumnHidden(arr[i], true);
-			}
-		}
+// éšè—åˆ—
+        int[] arr = param.getHiddenColumns();
+        if (arr != null) {
+            for (int i = 0; i < arr.length; i++) {
+                sheet.setColumnHidden(arr[i], true);
+            }
+        }
 
-		// ÉèÖÃÊÇ·ñ¿É±à¼­
-		boolean isEditable = param.isEditable();
-		if (!isEditable) {
-			String pwd = param.getDefaultPwd();
-			if (pwd == null) {
-				pwd = "";
-			}
-			sheet.protectSheet(pwd);// ´Ëºó¿ÉÒÔÉè¶¨ÃÜÂë
-		}
+// è®¾ç½®æ˜¯å¦å¯ç¼–è¾‘
+        boolean isEditable = param.isEditable();
+        if (!isEditable) {
+            String pwd = param.getDefaultPwd();
+            if (pwd == null) {
+                pwd = "";
+            }
+            sheet.protectSheet(pwd);// æ­¤åå¯ä»¥è®¾å®šå¯†ç 
+        }
 
-		// ¹«Ê½×Ô¶¯¼ÆËã
-		sheet.setForceFormulaRecalculation(true);
-		// ´´½¨ÎÄ¼şÊä³öÁ÷£¬×¼±¸Êä³öµç×Ó±í¸ñ
-		OutputStream out = param.getOutputStream();
-		if (out == null) {
-			throw new Exception("Êä³öÁ÷²ÎÊıOutputStream²»ÄÜÎª¿Õ£¡");
-		}
-		workbook.write(out);
-		out.flush();
-		out.close();
-		long t1 = System.currentTimeMillis();
-		System.out.println("Excelµ¼³ö³É¹¦£¡ºÄÊ±£º" + (t1 - t0) + "ms");
-	}
+// å…¬å¼è‡ªåŠ¨è®¡ç®—
+        sheet.setForceFormulaRecalculation(true);
+// åˆ›å»ºæ–‡ä»¶è¾“å‡ºæµï¼Œå‡†å¤‡è¾“å‡ºç”µå­è¡¨æ ¼
+        OutputStream out = param.getOutputStream();
+        if (out == null) {
+            throw new Exception("è¾“å‡ºæµå‚æ•°OutputStreamä¸èƒ½ä¸ºç©ºï¼");
+        }
+        workbook.write(out);
+        out.flush();
+        out.close();
+        long t1 = System.currentTimeMillis();
+        System.out.println("Excelå¯¼å‡ºæˆåŠŸï¼è€—æ—¶ï¼š" + (t1 - t0) + "ms");
+    }
 
-	private static String parseExcelName(String fileName) {
-		boolean flag = fileName.toLowerCase().endsWith(".xls") || fileName.toLowerCase().endsWith(".xlsx");
-		// ËùÓĞÊäÈëÁËºó×ºµÄÇé¿ö
-		if (flag) {// ½«ºó×ºÍ³Ò»×ª»»Îª.xls--ÓÅ»¯Îª¿ÉÒÔÖ§³Ö07°æ
-			int index = fileName.lastIndexOf(".");
-			return fileName.substring(0, index) + fileName.substring(index).toLowerCase();
-		} else {
-			return fileName + ".xls";
-		}
-	}
+    private static String parseExcelName(String fileName) {
+        boolean flag = fileName.toLowerCase().endsWith(".xls") || fileName.toLowerCase().endsWith(".xlsx");
+// æ‰€æœ‰è¾“å…¥äº†åç¼€çš„æƒ…å†µ
+        if (flag) {// å°†åç¼€ç»Ÿä¸€è½¬æ¢ä¸º.xls--ä¼˜åŒ–ä¸ºå¯ä»¥æ”¯æŒ07ç‰ˆ
+            int index = fileName.lastIndexOf(".");
+            return fileName.substring(0, index) + fileName.substring(index).toLowerCase();
+        } else {
+            return fileName + ".xls";
+        }
+    }
 
-	private static Workbook paresExcel(String excelpath) throws Exception {
-		InputStream in = new FileInputStream(excelpath);
-		return excelpath.endsWith("xlsx") ? new XSSFWorkbook(in) : new HSSFWorkbook(new POIFSFileSystem(in));
-	}
+    private static Workbook paresExcel(InputStream templateInputStream) throws Exception {
+        return new XSSFWorkbook(templateInputStream);
+//        return excelpath.endsWith("xlsx") ? new XSSFWorkbook(templateInputStream) : new HSSFWorkbook(new POIFSFileSystem(in));
+    }
 }
