@@ -1,16 +1,18 @@
-
-
 package com.robl.excelgraphic;
+
 
 import com.alibaba.fastjson.JSONObject;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import javax.servlet.http.HttpServletResponse;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -54,7 +56,7 @@ public class OfficeUtils {
         try {
             workbook = paresExcel(templateInputStream);
         } catch (Exception e) {
-            System.out.println("打开模板流失败!");
+            e.printStackTrace();
             throw new Exception("打开模板Excel流失败!templatePath=");
         }
 
@@ -64,7 +66,7 @@ public class OfficeUtils {
 
         String fileName = param.getExpExcelName();
         if (fileName == null || "".equals(fileName)) {
-            fileName = "导出报表.xls";
+            fileName = "导出报表.xlsx";
         } else {
             fileName = parseExcelName(fileName);
             if (excel07Flag && fileName.endsWith("xls")) {
@@ -100,7 +102,7 @@ public class OfficeUtils {
 // 赋值非循环部分
         Map<String, Object> dateMap = param.getHeadMap();
         if (dateMap != null) {
-            for (Entry<String, Object> entry : dateMap.entrySet())
+            for (Entry<String, Object> entry : dateMap.entrySet()) {
                 for (int i = 0; i <= countRowNum; i++) {
                     Row row = sheet.getRow(i);
                     if (row == null) {
@@ -155,6 +157,7 @@ public class OfficeUtils {
                         }
                     }
                 }
+            }
         }
 
         int startLoopRowNum = -1;
@@ -166,9 +169,9 @@ public class OfficeUtils {
             listSize = dataList.size();
             int k = startLoopRowNum;
             int startLoopColumNum = startLoopRow.getLastCellNum();
-            if (listSize != 0) {
-                sheet.shiftRows(startLoopRowNum + 1, countRowNum, listSize);// 先将循环下方内容向后平移listSize的行数，便于后边插入表格数据
-            }
+//            if (listSize != 0 && k < countRowNum) {
+//                sheet.shiftRows(startLoopRowNum + 1, sheet.getLastRowNum(), listSize);// 先将循环下方内容向后平移listSize的行数，便于后边插入表格数据
+//            }
 
             for (int i = 0; i < listSize; i++) {
                 Row newRow = sheet.createRow(++k);// 新建一行
@@ -197,6 +200,13 @@ public class OfficeUtils {
                             newCell.setCellValue((Double) obj);
                         } else if (obj instanceof Integer) {
                             newCell.setCellValue((Integer) obj);
+                        } else if (obj instanceof Long) {//大多数情况，long类型为时间戳
+                            SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
+                            try {
+                                newCell.setCellValue(sft.format(new Date((long) obj)));
+                            } catch (Exception e) {
+                                newCell.setCellValue(obj + "");
+                            }
                         } else if (obj instanceof Date) {
                             SimpleDateFormat sft = new SimpleDateFormat("yyyy-MM-dd");
                             newCell.setCellValue(sft.format((Date) obj));
@@ -232,15 +242,77 @@ public class OfficeUtils {
             }
         }
         if (startLoopRow != null) {
-            sheet.removeRow(startLoopRow);
+            for (int i = 0; i < startLoopRow.getLastCellNum(); i++) {
+                if (i == startLoopRow.getLastCellNum() - 1) {
+                    break;
+                }
+//                sheet.addMergedRegion(new CellRangeAddress(startLoopRowNum - 1, startLoopRowNum, i, i));
+            }
+//            sheet.removeRow(startLoopRow);
 // 删除变量名所在行，并将下面行上移
-            if (startLoopRowNum > -1) {
-                sheet.shiftRows(startLoopRowNum + 1, sheet.getLastRowNum(), -1);
+            if (startLoopRowNum > -1 && startLoopRow.getRowNum() < sheet.getLastRowNum()) {
+                sheet.shiftRows(startLoopRow.getRowNum() + 1, sheet.getLastRowNum(), -1);
+            }
+        }
+
+        List<int[]> autoMergeArea = param.getAutoMergeAreas();
+        if (dataList != null && autoMergeArea != null && autoMergeArea.size() > 0) {
+            for (int i = 0; i < autoMergeArea.size(); i++
+            ) {
+                int lastIndex = -1;
+                String template = "";
+                for (int j = startLoopRowNum; j < dataList.size() + startLoopRowNum; j++) {//遍历每一行
+                    int[] arr = autoMergeArea.get(i);
+                    if (arr.length == 1) {//独立按自己合并
+
+                        String cellValue = "";
+                        try {
+                            cellValue = sheet.getRow(j).getCell(arr[0]).getStringCellValue();
+                        } catch (Exception e) {
+                            cellValue = sheet.getRow(j).getCell(arr[0]).getNumericCellValue() + "";
+                        }//暂时只支持到String和int两种类型
+
+                        if (cellValue == null || "".equals(cellValue)) {
+                            lastIndex = j + 1;
+                            template = "";
+                            continue;
+                        }
+                        if (!cellValue.equals(template)) {
+                            //把上面的合并
+                            if (lastIndex > -1 && j - 1 > lastIndex) {
+                                sheet.addMergedRegion(new CellRangeAddress(lastIndex, j - 1, arr[0], arr[0]));
+                                CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
+                                cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                                cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                                sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
+                            }
+                            template = cellValue;
+                            lastIndex = j;
+                        }
+                        if (j == dataList.size() + startLoopRowNum - 1 && lastIndex != j) {
+                            sheet.addMergedRegion(new CellRangeAddress(lastIndex, j, arr[0], arr[0]));
+                            CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
+                            cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                            cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                            sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
+                        }
+                    } else {//参考其他列合并
+                        Map<String, Object> map = isMergedRegion(sheet, j, arr[1]);
+                        if ((boolean) map.get("isMergedRegion")) {
+                            sheet.addMergedRegion(new CellRangeAddress((Integer) map.get("firstRow"), (Integer) map.get("lastRow"), arr[0], arr[0]));
+                            CellStyle cellStyle = sheet.getRow((Integer) map.get("firstRow")).getCell(arr[0]).getCellStyle();
+                            cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                            cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                            sheet.getRow((Integer) map.get("firstRow")).getCell(arr[0]).setCellStyle(cellStyle);
+                            j = (Integer) map.get("lastRow") + 1;
+                        }
+                    }
+                }
             }
         }
 
 // 隐藏列
-        int[] arr = param.getHiddenColumns();
+        Integer[] arr = param.getHiddenColumns();
         if (arr != null) {
             for (int i = 0; i < arr.length; i++) {
                 sheet.setColumnHidden(arr[i], true);
@@ -260,13 +332,34 @@ public class OfficeUtils {
 // 公式自动计算
         sheet.setForceFormulaRecalculation(true);
 // 创建文件输出流，准备输出电子表格
-        OutputStream out = param.getOutputStream();
-        if (out == null) {
-            throw new Exception("输出流参数OutputStream不能为空！");
+        OutputStream out;
+        HttpServletResponse response = param.getResponse();
+        if (response != null) {
+            response.setContentType("application/vnd.ms-excel");
+            response.addHeader("Content-Disposition", "attachment;filename=" + fileName);
+//            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+//            workbook.write(outputStream);
+//            ByteArrayInputStream tempIn = new ByteArrayInputStream(outputStream.toByteArray());
+//            response.setHeader("Content-Length", String.valueOf(tempIn.available()));
+//            out = response.getOutputStream();
+//            byte[] buffer = new byte[1024];
+//            int a;
+//            while ((a = tempIn.read(buffer)) != -1) {
+//                out.write(buffer, 0, a);
+//            }
+//            out.flush();
+//            out.close();
+//            outputStream.flush();
+//            outputStream.close();
+//            templateInputStream.close();
+            workbook.write(response.getOutputStream());
+        } else {
+            out = param.getOutputStream();
+            workbook.write(out);
+            out.flush();
+            out.close();
+//            templateInputStream.close();
         }
-        workbook.write(out);
-        out.flush();
-        out.close();
         long t1 = System.currentTimeMillis();
         System.out.println("Excel导出成功！耗时：" + (t1 - t0) + "ms");
     }
@@ -284,6 +377,33 @@ public class OfficeUtils {
 
     private static Workbook paresExcel(InputStream templateInputStream) throws Exception {
         return new XSSFWorkbook(templateInputStream);
-//        return excelpath.endsWith("xlsx") ? new XSSFWorkbook(templateInputStream) : new HSSFWorkbook(new POIFSFileSystem(in));
+    }
+
+    private static Map<String, Object> isMergedRegion(Sheet sheet, int row, int column) {
+        int sheetMergeCount = sheet.getNumMergedRegions();
+        Map<String, Object> map = new HashMap<>();
+        for (int i = 0; i < sheetMergeCount; i++) {
+            CellRangeAddress range = sheet.getMergedRegion(i);
+            int firstColumn = range.getFirstColumn();
+            int lastColumn = range.getLastColumn();
+            int firstRow = range.getFirstRow();
+            int lastRow = range.getLastRow();
+            if (row >= firstRow && row <= lastRow) {
+                if (column >= firstColumn && column <= lastColumn) {
+                    map.put("isMergedRegion", true);
+                    map.put("firstRow", firstRow);
+                    map.put("lastRow", lastRow);
+                    map.put("firstColumn", firstColumn);
+                    map.put("lastColumn", lastColumn);
+                    return map;
+                }
+            }
+        }
+        map.put("isMergedRegion", false);
+        map.put("firstRow", 0);
+        map.put("lastRow", 0);
+        map.put("firstColumn", 0);
+        map.put("lastColumn", 0);
+        return map;
     }
 }

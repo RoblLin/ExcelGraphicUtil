@@ -1,27 +1,12 @@
 package com.robl.excelgraphic;
 
-import java.io.IOException;
+import javax.servlet.http.HttpServletResponse;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import javax.servlet.http.HttpServletResponse;
-
 /**
- * @param dataSheetNum      操作sheet编号，默认0
- * @param dataMap           变量赋值
- * @param dataList          循环列表-目前循环里最多支持一个公式
- * @param expExcelName      生成Excel文件名称
- * @param templateExcepPath 模板Excel路径
- * @param editable          导出Excel是否可编辑
- * @param defaultPwd        设置不可编辑时设置密码
- * @param hiddenColumns     设置隐藏列
- * @param outputStream      设置输出流-必需
- * @param response          Web响应
  * @author Robl
  * @throws Exception
  */
@@ -35,9 +20,10 @@ public class Param {
     private InputStream templateInputStream;
     private boolean editable;
     private String defaultPwd;
-    private int[] hiddenColumns;
+    private Integer[] hiddenColumns;
     private OutputStream outputStream;
     private HttpServletResponse response;
+    private List<int[]> autoMergeAreas;
 
     public Param() {
         dataSheetNum = 0;
@@ -84,11 +70,11 @@ public class Param {
         this.templateInputStream = templateInputStream;
     }
 
-    public int[] getHiddenColumns() {
+    public Integer[] getHiddenColumns() {
         return hiddenColumns;
     }
 
-    public void setHiddenColumns(int[] hiddenColumns) {
+    public void setHiddenColumns(Integer[] hiddenColumns) {
         this.hiddenColumns = hiddenColumns;
     }
 
@@ -106,22 +92,6 @@ public class Param {
 
     public void setResponse(HttpServletResponse response) {
         this.response = response;
-        try {
-            if (expExcelName == null) {
-                expExcelName = "导出Excel";
-            }
-            this.outputStream = response.getOutputStream();
-            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HHmmss");
-            String name = expExcelName.substring(0, expExcelName.lastIndexOf("."));
-            name = new String(name.getBytes("UTF-8"), "ISO-8859-1");
-            String suffix = expExcelName.substring(expExcelName.lastIndexOf("."));
-            response.setHeader("Content-disposition",
-                    "attachment;filename=" + name + dateFormat.format(new Date()) + suffix);
-            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8");
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
     }
 
     public Map<String, Object> getHeadMap() {
@@ -138,5 +108,13 @@ public class Param {
 
     public void setDataList(List<Object> dataList) {
         this.dataList = dataList;
+    }
+
+    public List<int[]> getAutoMergeAreas() {
+        return autoMergeAreas;
+    }
+
+    public void setAutoMergeAreas(List<int[]> autoMergeAreas) {
+        this.autoMergeAreas = autoMergeAreas;
     }
 }
