@@ -11,10 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
 
 /**
@@ -56,7 +53,7 @@ public class OfficeUtils {
         try {
             workbook = paresExcel(templateInputStream);
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("打开模板流失败!");
             throw new Exception("打开模板Excel流失败!templatePath=");
         }
 
@@ -73,6 +70,9 @@ public class OfficeUtils {
                 fileName += "x";// 如果是07版，未传入生成文件后缀，需要补上
             }
         }
+
+//        long t2 = System.currentTimeMillis();
+//        System.out.println("获取到workbook，耗时" + (t2 - t0) + "ms");
 
 // 获取工作簿sheet
         int num = param.getDataSheetNum();
@@ -160,6 +160,9 @@ public class OfficeUtils {
             }
         }
 
+//        long t3 = System.currentTimeMillis();
+//        System.out.println("赋值完所有headMap，耗时" + (t3 - t0) + "ms");
+
         int startLoopRowNum = -1;
         List<Object> dataList = param.getDataList();
         if (dataList != null && startLoopRow != null) {
@@ -241,13 +244,11 @@ public class OfficeUtils {
                 }
             }
         }
+
+        long t4 = System.currentTimeMillis();
+        System.out.println("赋值完所有数据，耗时" + (t4 - t0) + "ms");
+
         if (startLoopRow != null) {
-            for (int i = 0; i < startLoopRow.getLastCellNum(); i++) {
-                if (i == startLoopRow.getLastCellNum() - 1) {
-                    break;
-                }
-//                sheet.addMergedRegion(new CellRangeAddress(startLoopRowNum - 1, startLoopRowNum, i, i));
-            }
 //            sheet.removeRow(startLoopRow);
 // 删除变量名所在行，并将下面行上移
             if (startLoopRowNum > -1 && startLoopRow.getRowNum() < sheet.getLastRowNum()) {
@@ -255,62 +256,79 @@ public class OfficeUtils {
             }
         }
 
+//        long t5 = System.currentTimeMillis();
+//        System.out.println("所有list上移完成，耗时" + (t5 - t0) + "ms");
+
         List<int[]> autoMergeArea = param.getAutoMergeAreas();
         if (dataList != null && autoMergeArea != null && autoMergeArea.size() > 0) {
-            for (int i = 0; i < autoMergeArea.size(); i++
+
+            List<int[]> referenceAreas = new ArrayList<>();
+            int[] templateArea = new int[]{};
+            for (int i = 0; i < autoMergeArea.size(); i++) {
+                if (autoMergeArea.get(i).length == 1) {
+                    templateArea = autoMergeArea.get(i);
+                } else {
+                    referenceAreas.add(autoMergeArea.get(i));
+                }
+            }
+
+            //先合并参考行
+            int lastIndex = -1;
+            String template = "";
+            for (int j = startLoopRowNum; j < dataList.size() + startLoopRowNum; j++) {//遍历每一行
+                int[] arr = templateArea;
+                String cellValue = "";
+                try {
+                    cellValue = sheet.getRow(j).getCell(arr[0]).getStringCellValue();
+                } catch (Exception e) {
+                    cellValue = sheet.getRow(j).getCell(arr[0]).getNumericCellValue() + "";
+                }//暂时只支持到String和int两种类型
+
+                if (cellValue == null || "".equals(cellValue)) {
+                    lastIndex = j + 1;
+                    template = "";
+                    continue;
+                }
+                if (!cellValue.equals(template)) {
+                    //把上面的合并
+                    if (lastIndex > -1 && j - 1 > lastIndex) {
+                        sheet.addMergedRegion(new CellRangeAddress(lastIndex, j - 1, arr[0], arr[0]));
+                        CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
+                        cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                        cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                        sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
+                    }
+                    template = cellValue;
+                    lastIndex = j;
+                }
+                if (j == dataList.size() + startLoopRowNum - 1 && lastIndex != j) {
+                    sheet.addMergedRegion(new CellRangeAddress(lastIndex, j, arr[0], arr[0]));
+                    CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
+                    cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                    cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                    sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
+                }
+            }
+
+            Map<Integer, Map<String, Object>> map = allMergedReferenceColumnRegion(sheet);
+            for (int i = 0; i < referenceAreas.size(); i++
             ) {
-                int lastIndex = -1;
-                String template = "";
                 for (int j = startLoopRowNum; j < dataList.size() + startLoopRowNum; j++) {//遍历每一行
-                    int[] arr = autoMergeArea.get(i);
-                    if (arr.length == 1) {//独立按自己合并
-
-                        String cellValue = "";
-                        try {
-                            cellValue = sheet.getRow(j).getCell(arr[0]).getStringCellValue();
-                        } catch (Exception e) {
-                            cellValue = sheet.getRow(j).getCell(arr[0]).getNumericCellValue() + "";
-                        }//暂时只支持到String和int两种类型
-
-                        if (cellValue == null || "".equals(cellValue)) {
-                            lastIndex = j + 1;
-                            template = "";
-                            continue;
-                        }
-                        if (!cellValue.equals(template)) {
-                            //把上面的合并
-                            if (lastIndex > -1 && j - 1 > lastIndex) {
-                                sheet.addMergedRegion(new CellRangeAddress(lastIndex, j - 1, arr[0], arr[0]));
-                                CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
-                                cellStyle.setAlignment(HorizontalAlignment.CENTER);
-                                cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
-                                sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
-                            }
-                            template = cellValue;
-                            lastIndex = j;
-                        }
-                        if (j == dataList.size() + startLoopRowNum - 1 && lastIndex != j) {
-                            sheet.addMergedRegion(new CellRangeAddress(lastIndex, j, arr[0], arr[0]));
-                            CellStyle cellStyle = sheet.getRow(lastIndex).getCell(arr[0]).getCellStyle();
-                            cellStyle.setAlignment(HorizontalAlignment.CENTER);
-                            cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
-                            sheet.getRow(lastIndex).getCell(arr[0]).setCellStyle(cellStyle);
-                        }
-                    } else {//参考其他列合并
-                        Map<String, Object> map = isMergedRegion(sheet, j, arr[1]);
-                        if ((boolean) map.get("isMergedRegion")) {
-                            sheet.addMergedRegion(new CellRangeAddress((Integer) map.get("firstRow"), (Integer) map.get("lastRow"), arr[0], arr[0]));
-                            CellStyle cellStyle = sheet.getRow((Integer) map.get("firstRow")).getCell(arr[0]).getCellStyle();
-                            cellStyle.setAlignment(HorizontalAlignment.CENTER);
-                            cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
-                            sheet.getRow((Integer) map.get("firstRow")).getCell(arr[0]).setCellStyle(cellStyle);
-                            j = (Integer) map.get("lastRow") + 1;
-                        }
+                    int[] arr = referenceAreas.get(i);
+                    if (map.get(j) != null) {
+                        sheet.addMergedRegion(new CellRangeAddress((Integer) map.get(j).get("firstRow"), (Integer) map.get(j).get("lastRow"), arr[0], arr[0]));
+                        CellStyle cellStyle = sheet.getRow((Integer) map.get(j).get("firstRow")).getCell(arr[0]).getCellStyle();
+                        cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                        cellStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+                        sheet.getRow((Integer) map.get(j).get("firstRow")).getCell(arr[0]).setCellStyle(cellStyle);
+                        j = (Integer) map.get(j).get("lastRow") + 1;
                     }
                 }
             }
-        }
 
+            long t6 = System.currentTimeMillis();
+            System.out.println("合并完所有单元格，耗时" + (t6 - t0) + "ms");
+        }
 // 隐藏列
         Integer[] arr = param.getHiddenColumns();
         if (arr != null) {
@@ -337,31 +355,18 @@ public class OfficeUtils {
         if (response != null) {
             response.setContentType("application/vnd.ms-excel");
             response.addHeader("Content-Disposition", "attachment;filename=" + fileName);
-//            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-//            workbook.write(outputStream);
-//            ByteArrayInputStream tempIn = new ByteArrayInputStream(outputStream.toByteArray());
-//            response.setHeader("Content-Length", String.valueOf(tempIn.available()));
-//            out = response.getOutputStream();
-//            byte[] buffer = new byte[1024];
-//            int a;
-//            while ((a = tempIn.read(buffer)) != -1) {
-//                out.write(buffer, 0, a);
-//            }
-//            out.flush();
-//            out.close();
-//            outputStream.flush();
-//            outputStream.close();
-//            templateInputStream.close();
             workbook.write(response.getOutputStream());
         } else {
             out = param.getOutputStream();
             workbook.write(out);
             out.flush();
             out.close();
-//            templateInputStream.close();
+            templateInputStream.close();
         }
         long t1 = System.currentTimeMillis();
         System.out.println("Excel导出成功！耗时：" + (t1 - t0) + "ms");
+
+
     }
 
     private static String parseExcelName(String fileName) {
@@ -379,31 +384,25 @@ public class OfficeUtils {
         return new XSSFWorkbook(templateInputStream);
     }
 
-    private static Map<String, Object> isMergedRegion(Sheet sheet, int row, int column) {
+    private static Map<Integer, Map<String, Object>> allMergedReferenceColumnRegion(Sheet sheet) {
         int sheetMergeCount = sheet.getNumMergedRegions();
-        Map<String, Object> map = new HashMap<>();
+        Map<Integer, Map<String, Object>> mapTotal = new HashMap<>();
         for (int i = 0; i < sheetMergeCount; i++) {
             CellRangeAddress range = sheet.getMergedRegion(i);
             int firstColumn = range.getFirstColumn();
             int lastColumn = range.getLastColumn();
             int firstRow = range.getFirstRow();
             int lastRow = range.getLastRow();
-            if (row >= firstRow && row <= lastRow) {
-                if (column >= firstColumn && column <= lastColumn) {
-                    map.put("isMergedRegion", true);
-                    map.put("firstRow", firstRow);
-                    map.put("lastRow", lastRow);
-                    map.put("firstColumn", firstColumn);
-                    map.put("lastColumn", lastColumn);
-                    return map;
-                }
+            for (int j = firstRow; j <= lastRow; j++) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("isMergedRegion", true);
+                map.put("firstRow", firstRow);
+                map.put("lastRow", lastRow);
+                map.put("firstColumn", firstColumn);
+                map.put("lastColumn", lastColumn);
+                mapTotal.put(j, map);
             }
         }
-        map.put("isMergedRegion", false);
-        map.put("firstRow", 0);
-        map.put("lastRow", 0);
-        map.put("firstColumn", 0);
-        map.put("lastColumn", 0);
-        return map;
+        return mapTotal;
     }
 }
